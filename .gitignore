@@ -1,0 +1,47 @@
+# ---------------------------------------------------------------------------
+# Inputs that are large or machine-specific
+# ---------------------------------------------------------------------------
+# Installer ISOs (multi-GB, downloaded separately)
+iso/
+
+# Local overrides: passwords, SSH keys, host-specific paths.
+# *.auto.pkrvars.hcl is auto-loaded by Packer, so it must never be committed.
+*.auto.pkrvars.hcl
+*.local.pkrvars.hcl
+!*.example
+
+# ---------------------------------------------------------------------------
+# Build outputs (VMware VM folders, disks, raw images, manifests)
+# ---------------------------------------------------------------------------
+output/
+output-*/
+artifacts/
+*.vmdk
+*.vmx
+*.vmxf
+*.vmsd
+*.nvram
+*.img
+*.img.sha256
+*.ova
+*.ovf
+*.mf
+
+# ---------------------------------------------------------------------------
+# Packer runtime state and logs
+# ---------------------------------------------------------------------------
+packer_cache/
+.packer.d/
+logs/
+crash.log
+packer.log
+*.log
+
+# ---------------------------------------------------------------------------
+# OS / editor noise
+# ---------------------------------------------------------------------------
+.DS_Store
+._*
+.vscode/
+.idea/
+*.swp

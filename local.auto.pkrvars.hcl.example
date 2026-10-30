@@ -1,0 +1,15 @@
+# Copy to local.auto.pkrvars.hcl (git-ignored; Packer loads it automatically)
+# and set your own values.
+
+build_username = "k8sadmin"
+build_password = "use-a-long-unique-password"
+
+# Optional. When set, the key is installed for build_username and SSH password
+# login is turned off in the finished image (console login still works).
+ssh_authorized_key = "ssh-ed25519 AAAA... you@mac"
+
+# headless  = true
+# cpus      = 4
+# memory_mb = 8192
+# disk_size_mb = 61440
+# network_adapter_type = "vmxnet3"

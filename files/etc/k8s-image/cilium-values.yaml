@@ -1,0 +1,23 @@
+# Cilium Helm values baked into the image. k8sServiceHost is set by
+# k8s-init-control-plane at install time (kube-proxy is not deployed, so Cilium
+# must reach the API server directly).
+kubeProxyReplacement: true
+k8sServiceHost: ""
+k8sServicePort: 6443
+
+# Pod CIDRs come from kubeadm's --pod-network-cidr via the node objects.
+ipam:
+  mode: kubernetes
+
+routingMode: tunnel
+tunnelProtocol: vxlan
+
+operator:
+  replicas: 1   # raised to 2 by k8s-init-control-plane when --ha is passed
+
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true

@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# Bootstrap the first control-plane node of a new cluster from this image:
+# kubeadm init (no kube-proxy) -> Cilium from the baked chart -> join commands.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: sudo k8s-init-control-plane [options]
+
+  --node-name NAME        Set the hostname / node name (default: current hostname)
+  --endpoint HOST         Control-plane endpoint (IP, DNS name or VIP). Use a VIP or
+                          DNS name if you plan to add more control-plane nodes.
+                          Default: this node's primary IPv4 address.
+  --advertise-address IP  API server advertise address (default: primary IPv4)
+  --pod-cidr CIDR         Default 10.244.0.0/16
+  --service-cidr CIDR     Default 10.96.0.0/12
+  --single-node           Remove the control-plane taint so workloads run here
+  --ha                    Run 2 cilium-operator replicas (needs 2+ nodes)
+  -h, --help
+EOF
+}
+
+[[ $EUID -eq 0 ]] || { echo "Run as root (sudo)." >&2; exit 1; }
+# shellcheck disable=SC1091
+source /etc/k8s-image/versions.env
+
+primary_ip() { ip -4 route get 1.1.1.1 | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'; }
+
+NODE_NAME="$(hostname -s)"
+ADVERTISE="$(primary_ip)"
+ENDPOINT=""
+POD_CIDR="10.244.0.0/16"
+SVC_CIDR="10.96.0.0/12"
+SINGLE_NODE=false
+OPERATOR_REPLICAS=1
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --node-name) NODE_NAME="$2"; shift 2 ;;
+    --endpoint) ENDPOINT="$2"; shift 2 ;;
+    --advertise-address) ADVERTISE="$2"; shift 2 ;;
+    --pod-cidr) POD_CIDR="$2"; shift 2 ;;
+    --service-cidr) SVC_CIDR="$2"; shift 2 ;;
+    --single-node) SINGLE_NODE=true; shift ;;
+    --ha) OPERATOR_REPLICAS=2; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
+  esac
+done
+ENDPOINT="${ENDPOINT:-${ADVERTISE}}"
+
+# --- Node identity -----------------------------------------------------------
+if [[ "$(hostname -s)" != "${NODE_NAME}" ]]; then
+  hostnamectl set-hostname "${NODE_NAME}"
+  sed -i "s/^127\.0\.1\.1\s.*/127.0.1.1 ${NODE_NAME}/" /etc/hosts
+fi
+echo "preserve_hostname: true" > /etc/cloud/cloud.cfg.d/99-k8s-preserve-hostname.cfg
+grep -qE "\s${NODE_NAME}(\s|$)" /etc/hosts || echo "${ADVERTISE} ${NODE_NAME}" >> /etc/hosts
+
+# --- kubeadm init --------------------------------------------------------------
+CFG=/etc/k8s-image/kubeadm-init.yaml
+cat > "${CFG}" <<EOF
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: ${ADVERTISE}
+  bindPort: 6443
+nodeRegistration:
+  name: ${NODE_NAME}
+  criSocket: unix:///run/containerd/containerd.sock
+skipPhases:
+  - addon/kube-proxy
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: v${K8S_VERSION}
+controlPlaneEndpoint: "${ENDPOINT}:6443"
+networking:
+  podSubnet: ${POD_CIDR}
+  serviceSubnet: ${SVC_CIDR}
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+EOF
+
+echo "==> kubeadm init (Kubernetes v${K8S_VERSION}, endpoint ${ENDPOINT}:6443)"
+kubeadm init --config "${CFG}" --upload-certs | tee /root/kubeadm-init.log
+
+export KUBECONFIG=/etc/kubernetes/admin.conf
+ADMIN_USER="${SUDO_USER:-}"
+if [[ -n "${ADMIN_USER}" && "${ADMIN_USER}" != "root" ]]; then
+  ADMIN_HOME="$(getent passwd "${ADMIN_USER}" | cut -d: -f6)"
+  install -d -o "${ADMIN_USER}" -g "${ADMIN_USER}" -m 0700 "${ADMIN_HOME}/.kube"
+  install -o "${ADMIN_USER}" -g "${ADMIN_USER}" -m 0600 /etc/kubernetes/admin.conf "${ADMIN_HOME}/.kube/config"
+fi
+
+# --- Cilium ------------------------------------------------------------------
+echo "==> Installing Cilium ${CILIUM_VERSION} from ${CILIUM_CHART}"
+helm upgrade --install cilium "${CILIUM_CHART}" \
+  --namespace kube-system \
+  -f /etc/k8s-image/cilium-values.yaml \
+  --set k8sServiceHost="${ENDPOINT}" \
+  --set k8sServicePort=6443 \
+  --set operator.replicas="${OPERATOR_REPLICAS}"
+
+cilium status --wait --wait-duration 10m
+
+if [[ "${SINGLE_NODE}" == "true" ]]; then
+  kubectl taint nodes "${NODE_NAME}" node-role.kubernetes.io/control-plane:NoSchedule- || true
+fi
+
+kubectl get nodes -o wide
+
+# --- Join instructions -----------------------------------------------------------
+JOIN="$(kubeadm token create --print-join-command --ttl 24h)"
+CERT_KEY="$(kubeadm init phase upload-certs --upload-certs 2>/dev/null | tail -n1)"
+cat <<EOF | tee /root/k8s-join-commands.txt
+
+Worker nodes (run on each new node from this image):
+  sudo k8s-join-node --node-name <name> -- ${JOIN#kubeadm join }
+
+Additional control-plane nodes (endpoint must be a VIP/DNS name for real HA):
+  sudo k8s-join-node --node-name <name> -- ${JOIN#kubeadm join } --control-plane --certificate-key ${CERT_KEY}
+
+(Token valid 24h, certificate key 2h. Saved to /root/k8s-join-commands.txt)
+EOF

@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Grow the LVM-backed root filesystem into any unused disk space:
+#   1. growpart  - extend the partition holding the LVM PV to the end of the disk
+#   2. pvresize  - let LVM see the bigger PV
+#   3. lvextend  - give the free extents to the root LV and resize ext4 online (-r)
+# Safe to run repeatedly; does nothing when there is no free space.
+# Usage: sudo k8s-grow-root [--size +20G]   (default: all free space)
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] || { echo "Run as root (sudo)." >&2; exit 1; }
+
+LV_SIZE="+100%FREE"
+if [[ "${1:-}" == "--size" && -n "${2:-}" ]]; then
+  LV_SIZE="$2"
+fi
+
+ROOT_DEV="$(findmnt -no SOURCE /)"
+if ! lvs "${ROOT_DEV}" >/dev/null 2>&1; then
+  echo "Root (${ROOT_DEV}) is not an LVM logical volume; nothing to do."
+  exit 0
+fi
+
+VG="$(lvs --noheadings -o vg_name "${ROOT_DEV}" | tr -d ' ')"
+
+# Every PV in the root VG that sits on a partition (normally just one).
+while read -r PV; do
+  [[ -n "${PV}" ]] || continue
+  PART_NAME="$(basename "$(readlink -f "${PV}")")"
+  PART_NUM_FILE="/sys/class/block/${PART_NAME}/partition"
+  if [[ ! -r "${PART_NUM_FILE}" ]]; then
+    echo "PV ${PV} is a whole disk; resizing PV only."
+  else
+    DISK="/dev/$(lsblk -no PKNAME "/dev/${PART_NAME}" | head -n1)"
+    PART_NUM="$(cat "${PART_NUM_FILE}")"
+    echo "==> growpart ${DISK} ${PART_NUM}"
+    rc=0
+    growpart "${DISK}" "${PART_NUM}" || rc=$?
+    # growpart exits 1 with "NOCHANGE" when the partition already fills the disk.
+    if [[ ${rc} -gt 1 ]]; then
+      echo "growpart failed (exit ${rc})" >&2
+      exit "${rc}"
+    fi
+  fi
+  echo "==> pvresize ${PV}"
+  pvresize "${PV}"
+done < <(pvs --noheadings -o pv_name -S vg_name="${VG}" | tr -d ' ')
+
+FREE_PE="$(vgs --noheadings -o vg_free_count "${VG}" | tr -d ' ')"
+if [[ "${FREE_PE}" -eq 0 ]]; then
+  echo "No free space in VG ${VG}; root is already at full size."
+  df -h /
+  exit 0
+fi
+
+echo "==> lvextend ${ROOT_DEV} (${LV_SIZE})"
+if [[ "${LV_SIZE}" == +*%* ]]; then
+  lvextend -r -l "${LV_SIZE}" "${ROOT_DEV}"
+else
+  lvextend -r -L "${LV_SIZE}" "${ROOT_DEV}"
+fi
+df -h /

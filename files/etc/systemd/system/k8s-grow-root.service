@@ -1,0 +1,16 @@
+[Unit]
+Description=Grow the LVM root volume into unused disk space
+# Runs every boot: after a disk is enlarged in Fusion, or the .img is written
+# to a bigger disk, root grows automatically. It does nothing when the disk is
+# already fully used.
+After=local-fs.target
+Before=kubelet.service containerd.service
+ConditionVirtualization=!container
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/k8s-grow-root
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

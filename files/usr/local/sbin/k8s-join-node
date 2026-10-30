@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Join this node to an existing cluster. Everything after "--" is passed to
+# "kubeadm join" (use the command printed by k8s-init-control-plane).
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: sudo k8s-join-node [--node-name NAME] -- <kubeadm join arguments>
+
+Example:
+  sudo k8s-join-node --node-name worker-01 -- 192.168.64.10:6443 \
+      --token abcdef.0123456789abcdef \
+      --discovery-token-ca-cert-hash sha256:<hash>
+EOF
+}
+
+[[ $EUID -eq 0 ]] || { echo "Run as root (sudo)." >&2; exit 1; }
+
+NODE_NAME="$(hostname -s)"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --node-name) NODE_NAME="$2"; shift 2 ;;
+    --) shift; break ;;
+    -h|--help) usage; exit 0 ;;
+    *) break ;;
+  esac
+done
+[[ $# -gt 0 ]] || { usage; exit 1; }
+
+if [[ "$(hostname -s)" != "${NODE_NAME}" ]]; then
+  hostnamectl set-hostname "${NODE_NAME}"
+  sed -i "s/^127\.0\.1\.1\s.*/127.0.1.1 ${NODE_NAME}/" /etc/hosts
+fi
+echo "preserve_hostname: true" > /etc/cloud/cloud.cfg.d/99-k8s-preserve-hostname.cfg
+IP="$(ip -4 route get 1.1.1.1 | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}')"
+grep -qE "\s${NODE_NAME}(\s|$)" /etc/hosts || echo "${IP} ${NODE_NAME}" >> /etc/hosts
+
+kubeadm join "$@" \
+  --node-name "${NODE_NAME}" \
+  --cri-socket unix:///run/containerd/containerd.sock
