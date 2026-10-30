@@ -85,6 +85,10 @@ variable "build_password" {
   description = "Password for build_username. Change it in local.auto.pkrvars.hcl."
   default     = "ChangeMe-Packer!"
   sensitive   = true
+  validation {
+    condition     = var.build_password != "use-a-long-unique-password" && length(var.build_password) >= 8
+    error_message = "The build_password is still the example placeholder (or shorter than 8 characters). Set your own in local.auto.pkrvars.hcl."
+  }
 }
 
 variable "ssh_build_port" {
@@ -97,6 +101,10 @@ variable "ssh_authorized_key" {
   type        = string
   description = "Optional public key added to build_username. When set, SSH password login is disabled in the final image."
   default     = ""
+  validation {
+    condition     = var.ssh_authorized_key == "" || can(regex("^(ssh-(ed25519|rsa)|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\\.com) [A-Za-z0-9+/]{40,}={0,3}( .*)?$", var.ssh_authorized_key))
+    error_message = "The ssh_authorized_key must be a real public key (e.g. the contents of ~/.ssh/id_ed25519.pub) or empty. The example placeholder would lock you out of SSH."
+  }
 }
 
 # --- Software versions (pinned) ---------------------------------------------

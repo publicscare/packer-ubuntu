@@ -1,0 +1,13 @@
+# Packer templates, autoinstall templates and provisioning scripts are used
+# inside Linux guests: keep them LF even when the repo is cloned on Windows
+# (core.autocrlf would otherwise turn them into CRLF and break bash/cloud-init).
+* text=auto eol=lf
+
+# Binary files (most are git-ignored anyway)
+*.iso   binary
+*.img   binary
+*.vmdk  binary
+*.qcow2 binary
+*.ova   binary
+*.box   binary
+*.der   binary

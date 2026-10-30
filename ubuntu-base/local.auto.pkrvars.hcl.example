@@ -1,0 +1,11 @@
+# Copy to local.auto.pkrvars.hcl (git-ignored; Packer loads it automatically).
+
+build_username = "ubuntu"
+build_password = "use-a-long-unique-password"
+
+# Optional. When set, SSH password login is turned off in the finished image.
+ssh_authorized_key = "ssh-ed25519 AAAA... you@mac"
+
+# packages_file = "packages.txt"
+# headless      = true
+# disk_size_mb  = 61440

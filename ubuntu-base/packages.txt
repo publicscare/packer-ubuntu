@@ -1,0 +1,26 @@
+# Packages installed into the base image by scripts/10-packages.sh.
+# One per line. Blank lines and anything after # are ignored.
+#
+# Plain names are installed with apt from Ubuntu's archive.
+# Two names get special handling:
+#   gh          GitHub CLI, from GitHub's own apt repo (cli.github.com)
+#   powershell  PowerShell 7 (pwsh). Microsoft ships no arm64 .deb, so it is
+#               installed from the official release tarball (version and
+#               SHA-256 pinned in variables.pkr.hcl)
+#   yq          mikefarah/yq v4 (Go) from its GitHub release, SHA-256 pinned.
+#               Ubuntu's apt "yq" is a different tool (a Python jq wrapper).
+#
+# Required minimum: keep these four.
+ca-certificates
+git
+gh
+powershell
+
+# Extras
+dos2unix
+yq
+
+# Add your own below, e.g.
+# jq
+# vim
+# python3-pip

@@ -1,12 +1,26 @@
 # ---------------------------------------------------------------------------
 # Inputs that are large or machine-specific
 # ---------------------------------------------------------------------------
-# Installer ISOs (multi-GB, downloaded separately)
+# Installer ISOs (multi-GB, downloaded separately) - the iso/ folder and any
+# stray ISO anywhere in the repo, in either case.
 iso/
+*.[iI][sS][oO]
+
+# Corporate CA certificates (e.g. zscaler-ca.crt) used by builds: local only.
+# Keep the folder itself (README + .gitkeep) so the path exists in every clone.
+certs/*
+!certs/README.md
+!certs/.gitkeep
+*.crt
+*.cer
+*.der
 
 # Local overrides: passwords, SSH keys, host-specific paths.
 # *.auto.pkrvars.hcl is auto-loaded by Packer, so it must never be committed.
 *.auto.pkrvars.hcl
+# ...and any backup/copy of it (.bak, .old, -copy), which may hold passwords
+*.auto.pkrvars.hcl.*
+*.pkrvars.hcl.bak
 *.local.pkrvars.hcl
 !*.example
 
