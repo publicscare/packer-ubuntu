@@ -29,7 +29,7 @@ chmod 0755 /usr/local/bin/cilium
 
 echo "==> [30-cilium] Saving Cilium ${CILIUM_VERSION} chart and values"
 install -d -m 0755 /opt/k8s-image/charts /etc/k8s-image
-install -m 0644 /tmp/k8s-image/etc/k8s-image/cilium-values.yaml /etc/k8s-image/cilium-values.yaml
+install -m 0644 /var/tmp/k8s-image/etc/k8s-image/cilium-values.yaml /etc/k8s-image/cilium-values.yaml
 export HELM_CONFIG_HOME="${WORK}/helm-config" HELM_CACHE_HOME="${WORK}/helm-cache"
 helm repo add cilium https://helm.cilium.io/ >/dev/null
 helm repo update cilium >/dev/null
@@ -37,6 +37,7 @@ helm pull cilium/cilium --version "${CILIUM_VERSION}" -d /opt/k8s-image/charts
 CHART="/opt/k8s-image/charts/cilium-${CILIUM_VERSION}.tgz"
 
 echo "==> [30-cilium] Pre-pulling images referenced by the chart"
+command -v crictl >/dev/null 2>&1 || apt-get install -y cri-tools
 helm template cilium "${CHART}" --namespace kube-system \
   -f /etc/k8s-image/cilium-values.yaml \
   --set k8sServiceHost=127.0.0.1 --set k8sServicePort=6443 \

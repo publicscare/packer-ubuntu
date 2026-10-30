@@ -82,6 +82,7 @@ source "vmware-iso" "ubuntu-k8s" {
       username           = var.build_username
       password           = var.build_password
       ssh_authorized_key = var.ssh_authorized_key
+      ssh_build_port     = var.ssh_build_port
     })
     "/meta-data" = "instance-id: ${local.vm_name}\nlocal-hostname: ${var.hostname}\n"
   }
@@ -97,9 +98,12 @@ source "vmware-iso" "ubuntu-k8s" {
   ]
 
   # --- Communicator ----------------------------------------------------------
-  # The live installer also runs an sshd; Packer's login fails against it until
-  # the installed system reboots, so allow plenty of handshake attempts.
+  # The live installer runs its own sshd on port 22. If Packer reaches it, the
+  # plugin caches that IP and never re-reads the DHCP leases, but the installed
+  # system comes up on a different lease. The installed system therefore also
+  # listens on ssh_build_port during the build, and Packer only uses that port.
   communicator           = "ssh"
+  ssh_port               = var.ssh_build_port
   ssh_username           = var.build_username
   ssh_password           = var.build_password
   ssh_timeout            = "60m"
@@ -123,18 +127,18 @@ build {
 
   # Stage config files and helper scripts that end up inside the image.
   provisioner "shell" {
-    inline = ["mkdir -p /tmp/k8s-image"]
+    inline = ["mkdir -p /var/tmp/k8s-image"]
   }
 
   provisioner "file" {
     source      = "${path.root}/files/"
-    destination = "/tmp/k8s-image"
+    destination = "/var/tmp/k8s-image"
   }
 
   # OS baseline, then reboot onto the updated kernel.
   provisioner "shell" {
     environment_vars = local.provision_env
-    execute_command  = "chmod +x {{ .Path }}; sudo -E bash '{{ .Path }}'"
+    execute_command  = "chmod +x {{ .Path }}; sudo env {{ .Vars }} bash '{{ .Path }}'"
     script           = "${path.root}/scripts/00-base.sh"
   }
 
@@ -147,7 +151,7 @@ build {
   provisioner "shell" {
     pause_before     = "30s"
     environment_vars = local.provision_env
-    execute_command  = "chmod +x {{ .Path }}; sudo -E bash '{{ .Path }}'"
+    execute_command  = "chmod +x {{ .Path }}; sudo env {{ .Vars }} bash '{{ .Path }}'"
     scripts = [
       "${path.root}/scripts/10-containerd.sh",
       "${path.root}/scripts/20-kubernetes.sh",
@@ -158,6 +162,18 @@ build {
   }
 
   # --- Post-processing on the Mac ---------------------------------------------
+  # Runs in order: the raw-image script creates artifacts/, then the manifest
+  # is written into it.
+  post-processor "shell-local" {
+    environment_vars = [
+      "CREATE_RAW_IMAGE=${var.create_raw_image}",
+      "VM_OUTPUT_DIR=${local.output_dir}",
+      "ARTIFACTS_DIR=${local.artifacts_dir}",
+      "IMAGE_NAME=${local.vm_name}",
+    ]
+    script = "${path.root}/scripts/host/convert-to-raw.sh"
+  }
+
   post-processor "manifest" {
     output     = "${local.artifacts_dir}/manifest.json"
     strip_path = false
@@ -167,15 +183,5 @@ build {
       containerd_version = var.containerd_version
       architecture       = local.arch
     }
-  }
-
-  post-processor "shell-local" {
-    environment_vars = [
-      "CREATE_RAW_IMAGE=${var.create_raw_image}",
-      "VM_OUTPUT_DIR=${local.output_dir}",
-      "ARTIFACTS_DIR=${local.artifacts_dir}",
-      "IMAGE_NAME=${local.vm_name}",
-    ]
-    script = "${path.root}/scripts/host/convert-to-raw.sh"
   }
 }

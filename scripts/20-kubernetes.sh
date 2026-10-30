@@ -12,15 +12,20 @@ echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.
   > /etc/apt/sources.list.d/kubernetes.list
 apt-get update -y
 
-PKG_VER="$(apt-cache madison kubeadm | awk -v v="${K8S_VERSION}" '$3 ~ "^"v"-" {print $3; exit}')"
+# Capture first, then parse: piping into "awk ... exit" closes the pipe early,
+# apt-cache dies with SIGPIPE and pipefail turns that into exit 141.
+MADISON="$(apt-cache madison kubeadm)"
+PKG_VER="$(awk -v v="${K8S_VERSION}" '$3 ~ "^"v"-" && !found {print $3; found=1}' <<<"${MADISON}")"
 if [[ -z "${PKG_VER}" ]]; then
   echo "ERROR: kubeadm ${K8S_VERSION} not found in pkgs.k8s.io v${K8S_MINOR}" >&2
   exit 1
 fi
 
 echo "==> [20-kubernetes] Installing kubelet/kubeadm/kubectl ${PKG_VER}"
-apt-get install -y kubelet="${PKG_VER}" kubeadm="${PKG_VER}" kubectl="${PKG_VER}"
-apt-mark hold kubelet kubeadm kubectl
+# cri-tools (crictl) is no longer pulled in by kubeadm; install it explicitly.
+apt-get install -y kubelet="${PKG_VER}" kubeadm="${PKG_VER}" kubectl="${PKG_VER}" cri-tools
+apt-mark hold kubelet kubeadm kubectl cri-tools
+crictl --version
 
 cat > /etc/crictl.yaml <<'EOF'
 runtime-endpoint: unix:///run/containerd/containerd.sock
@@ -29,7 +34,8 @@ timeout: 10
 EOF
 
 # Keep containerd's sandbox (pause) image in step with what kubeadm expects.
-PAUSE_IMAGE="$(kubeadm config images list --kubernetes-version "v${K8S_VERSION}" | grep '/pause:' | head -n1)"
+IMAGES="$(kubeadm config images list --kubernetes-version "v${K8S_VERSION}")"
+PAUSE_IMAGE="$(awk '/\/pause:/ && !found {print; found=1}' <<<"${IMAGES}")"
 if grep -qE "^\s*sandbox(_image)? = " /etc/containerd/config.toml; then
   sed -ri "s#^(\s*sandbox(_image)? = ).*#\1'${PAUSE_IMAGE}'#" /etc/containerd/config.toml
   systemctl restart containerd

@@ -22,6 +22,9 @@ KbdInteractiveAuthentication no
 EOF
 fi
 
+echo "==> [90-cleanup] Removing the build-only SSH port"
+rm -f /etc/ssh/sshd_config.d/05-packer-build.conf
+
 echo "==> [90-cleanup] apt"
 apt-get -y autoremove --purge
 apt-get -y clean
@@ -37,6 +40,10 @@ rm -f /root/.bash_history "/home/${BUILD_USERNAME:-nobody}/.bash_history"
 
 echo "==> [90-cleanup] Resetting machine identity"
 cloud-init clean --logs --machine-id 2>/dev/null || cloud-init clean --logs
+# The Ubuntu installer turns cloud-init off after the first boot by creating
+# this marker. Remove it so clones run cloud-init again (new SSH host keys,
+# VMware guestinfo / NoCloud customisation).
+rm -f /etc/cloud/cloud-init.disabled
 truncate -s 0 /etc/machine-id
 rm -f /var/lib/dbus/machine-id
 ln -sf /etc/machine-id /var/lib/dbus/machine-id
