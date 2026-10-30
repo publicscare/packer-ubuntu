@@ -45,3 +45,6 @@ packer.log
 .vscode/
 .idea/
 *.swp
+
+# Leftovers from editing files through a FUSE mount
+.fuse_hidden*

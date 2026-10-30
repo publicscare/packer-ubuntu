@@ -123,6 +123,7 @@ Leave `headless = false` for the first run so the Fusion console shows the boot 
 |---|---|
 | VM sits at the GRUB menu; boot command never typed | USB controller absent → template sets `usb = true`; keep it. Also check nothing else uses ports 5900–6000 (Screen Sharing). |
 | Installer starts but stops at the language screen (no autoinstall) | VM can't reach Packer's HTTP server → allow `packer` in the firewall (step 4); disconnect VPN. In the console press `Alt+F2` and `curl http://<HTTPIP>:<port>/user-data`. |
+| `Waiting for SSH...` forever, the console shows `k8s-node login:`, and the log keeps dialling one IP with `i/o timeout` / `host is down` | Packer locked onto the **installer's** IP before the reboot. The template stops the installer's sshd in `early-commands`; if it still happens, check `/var/db/vmware/vmnet-dhcpd-vmnet8.leases` for a second lease for the VM's MAC address. |
 | `Waiting for SSH to become available...` forever | Guest IP not found or SSH blocked → Local Network permission (step 4); check the leases file (step 3); the NIC name must match `e*`. |
 | `Error: vmrun not found` / `Fusion not found` | Fusion not in `/Applications` → set `fusion_app_path` in `local.auto.pkrvars.hcl`. |
 | `output directory already exists` | Delete `output/<vm_name>` from a previous run, or run `packer build -force .`. |

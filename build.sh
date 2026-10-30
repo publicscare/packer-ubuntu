@@ -19,7 +19,7 @@ packer validate .
 
 [[ "${1:-build}" == "validate" ]] && exit 0
 
-mkdir -p logs
+mkdir -p logs artifacts
 export PACKER_LOG=1
 PACKER_LOG_PATH="logs/packer-$(date +%Y%m%d-%H%M%S).log"
 export PACKER_LOG_PATH

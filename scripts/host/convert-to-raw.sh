@@ -3,6 +3,9 @@
 set -euo pipefail
 : "${VM_OUTPUT_DIR:?}" "${ARTIFACTS_DIR:?}" "${IMAGE_NAME:?}"
 
+# Always create the artifacts folder: the manifest post-processor writes here too.
+mkdir -p "${ARTIFACTS_DIR}"
+
 if [[ "${CREATE_RAW_IMAGE:-true}" != "true" ]]; then
   echo "create_raw_image=false: skipping raw image conversion"
   exit 0

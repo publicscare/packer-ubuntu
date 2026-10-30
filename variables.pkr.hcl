@@ -87,6 +87,12 @@ variable "build_password" {
   sensitive   = true
 }
 
+variable "ssh_build_port" {
+  type        = number
+  description = "Extra sshd port opened only during the build. Packer connects here, so it can never latch onto the live installer's sshd (port 22). Removed by 90-cleanup.sh."
+  default     = 2222
+}
+
 variable "ssh_authorized_key" {
   type        = string
   description = "Optional public key added to build_username. When set, SSH password login is disabled in the final image."

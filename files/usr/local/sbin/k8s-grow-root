@@ -30,7 +30,7 @@ while read -r PV; do
   if [[ ! -r "${PART_NUM_FILE}" ]]; then
     echo "PV ${PV} is a whole disk; resizing PV only."
   else
-    DISK="/dev/$(lsblk -no PKNAME "/dev/${PART_NAME}" | head -n1)"
+    DISK="/dev/$(lsblk -no PKNAME "/dev/${PART_NAME}" | awk 'NR==1')"
     PART_NUM="$(cat "${PART_NUM_FILE}")"
     echo "==> growpart ${DISK} ${PART_NUM}"
     rc=0

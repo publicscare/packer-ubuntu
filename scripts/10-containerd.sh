@@ -39,6 +39,6 @@ fi
 systemctl daemon-reload
 systemctl enable --now containerd
 /usr/local/bin/containerd --version
-runc --version | head -n1
+runc --version | awk 'NR==1'
 
 echo "==> [10-containerd] Done"
